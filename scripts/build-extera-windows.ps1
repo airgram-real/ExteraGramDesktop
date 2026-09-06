@@ -1,3 +1,4 @@
+param([switch]$CheckToolchain)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 Set-Location -LiteralPath $repo
@@ -11,12 +12,19 @@ $major = ([version]$installations[0].installationVersion).Major
 $generator = if ($major -ge 18) { 'Visual Studio 18 2026' } else { 'Visual Studio 17 2022' }
 Write-Output "Using $generator at $vs"
 $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
-$environment = & $env:ComSpec /d /s /c "`"`"$vcvars`" -vcvars_ver=14.44 >nul && set`""
+$environment = & $env:ComSpec /d /c "call `"$vcvars`" -vcvars_ver=14.44 >nul && set"
 if ($LASTEXITCODE -ne 0) { throw 'MSVC 14.44 environment setup failed.' }
 foreach ($line in $environment) {
     if ($line -match '^([^=]+)=(.*)$') {
         [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
     }
+}
+if ($CheckToolchain) {
+    if ($env:VCToolsVersion -notlike '14.44.*' -or $env:Platform -ne 'x64') {
+        throw 'Unexpected compiler version or architecture.'
+    }
+    Write-Output "TOOLCHAIN OK: MSVC $env:VCToolsVersion / $env:Platform"
+    exit 0
 }
 $env:QT = '5.15.19'
 $env:CMAKE_BUILD_PARALLEL_LEVEL = '2'
