@@ -351,10 +351,12 @@ def main():
     protocol = sys.stdout
     sys.stdout = sys.stderr
     host = Host(args.root)
+    clean_exit = False
     try:
         while True:
             line = sys.stdin.buffer.readline(MAX_MESSAGE + 1)
             if not line:
+                clean_exit = True
                 break
             request = {}
             try:
@@ -374,9 +376,11 @@ def main():
             protocol.write(data + "\n")
             protocol.flush()
             if request.get("op") == "shutdown":
+                clean_exit = True
                 break
     finally:
-        host.close()
+        if clean_exit:
+            host.close()
 
 
 if __name__ == "__main__":

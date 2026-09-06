@@ -4,8 +4,12 @@ Set-Location -LiteralPath $repo
 New-Item -ItemType Directory -Force build-logs | Out-Null
 
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-$vs = & $vswhere -latest -version '[17.0,18.0)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-if (-not $vs) { throw 'Visual Studio 2022 with C++ x64 tools is required.' }
+$installations = & $vswhere -latest -version '[17.0,19.0)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -format json | ConvertFrom-Json
+if (-not $installations) { throw 'Visual Studio 2022 or 2026 with C++ x64 tools is required.' }
+$vs = $installations[0].installationPath
+$major = ([version]$installations[0].installationVersion).Major
+$generator = if ($major -ge 18) { 'Visual Studio 18 2026' } else { 'Visual Studio 17 2022' }
+Write-Output "Using $generator at $vs"
 $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
 $environment = & $env:ComSpec /d /s /c "`"`"$vcvars`" -vcvars_ver=14.44 >nul && set`""
 if ($LASTEXITCODE -ne 0) { throw 'MSVC 14.44 environment setup failed.' }
@@ -19,7 +23,7 @@ $env:CMAKE_BUILD_PARALLEL_LEVEL = '2'
 & python Telegram/build/prepare/prepare.py skip-release 2>&1 | Tee-Object build-logs/prepare.log
 if ($LASTEXITCODE -ne 0) { throw 'Preparing upstream dependencies failed; see prepare.log.' }
 
-$options = @('-S', '.', '-B', 'out', '-G', 'Visual Studio 17 2022', '-A', 'x64', '-T', 'v143',
+$options = @('-S', '.', '-B', 'out', '-G', $generator, '-A', 'x64', '-T', 'v143',
     '-DCMAKE_SYSTEM_VERSION=10.0.26100.0', '-DDESKTOP_APP_DISABLE_AUTOUPDATE=ON',
     '-DDESKTOP_APP_DISABLE_CRASH_REPORTS=ON', '-DDESKTOP_APP_ENABLE_LTO=OFF',
     '-DCMAKE_CXX_FLAGS=/FS', '-DCMAKE_C_FLAGS=/FS')

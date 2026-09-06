@@ -231,6 +231,32 @@ class Plugin(BasePlugin):
         results = [json.loads(line) for line in process.stdout.splitlines()]
         self.assertEqual([result["ok"] for result in results], [False, False, True])
 
+    def test_plugin_system_exit_retains_recovery_marker(self):
+        path = self.make_plugin('''from base_plugin import BasePlugin
+from ui.settings import Input
+__id__="exit_plugin"
+__name__="Exit plugin"
+__platform__="desktop"
+__desktop_api__=1
+class Plugin(BasePlugin):
+    def create_settings(self):
+        raise SystemExit(7)
+''')
+        root = self.root / "fatal"
+        requests = [dict(op="install", path=str(path)), dict(op="engine", value=True),
+                    dict(op="enable", plugin="exit_plugin", value=True),
+                    dict(op="settings", plugin="exit_plugin")]
+        process = subprocess.run(
+            [sys.executable, "-B", str(RUNTIME / "host.py"), "--root", str(root)],
+            input="\n".join(json.dumps(dict(id=i, **request)) for i, request in enumerate(requests)) + "\n",
+            text=True, capture_output=True, timeout=15)
+        self.assertEqual(process.returncode, 7)
+        self.assertTrue((root / "running").exists())
+        recovery = Host(root)
+        self.addCleanup(recovery.close)
+        self.assertFalse(recovery.snapshot()["engine"])
+        self.assertEqual(recovery.active, {})
+
 
 if __name__ == "__main__":
     unittest.main()
